@@ -21,9 +21,41 @@ The current and past members of the MkDocs team.
 * [@d0ugal](https://github.com/d0ugal/)
 * [@waylan](https://github.com/waylan/)
 
-## Version 1.2 (Under development)
+## Version 1.2.1 (2021-06-09)
+
+* Bugfix: Ensure 'gh-deploy' always pushes.
+
+## Version 1.2 (2021-06-04)
 
 ### Major Additions to Version 1.2
+
+### Support added for Theme Localization (#2299)
+
+The `mkdocs` and `readthedocs` themes now support language localization using
+the `theme.locale` parameter, which defaults to `en` (English). The only other
+supported languages in this release are `fr` (French) and `es` (Spanish). For
+details on using the provided translations, see the [user
+guide](../user-guide/localizing-your-theme.md). Note that translation will not
+happen by default. Users must first install the necessary dependencies with
+the following command:
+
+```bash
+pip install mkdocs[i18n]
+```
+
+Translation contributions are welcome and detailed in the [Translation
+Guide](../dev-guide/translations.md).
+
+Developers of third party themes may want to review the relevant section of
+the [Theme Development
+Guide](../dev-guide/themes.md#supporting-theme-localizationtranslation).
+
+Contributors who are updating the templates to the built-in themes should
+review the [Contributing
+Guide](contributing.md#submitting-changes-to-the-builtin-themes).
+
+The `lang` setting of the `search` plugin now defaults to the language
+specified in `theme.locale`.
 
 #### Support added for Environment Variables in the configuration file (#1954)
 
@@ -39,10 +71,23 @@ otherkey: !ENV [VAR_NAME, FALLBACK_VAR, 'default value']
 See [Environment Variables](../user-guide/configuration.md#environment-variables)
 in the Configuration documentation for details.
 
+#### Support added for Configuration Inheritance (#2218)
+
+A configuration file may now inherit from a parent configuration file. In the
+primary file set the `INHERIT` key to the relative path of the parent file.
+
+```yaml
+INHERIT: path/to/base.yml
+```
+
+The two files will then be deep merged. See
+[Configuration Inheritance](../user-guide/configuration.md#configuration-inheritance)
+for details.
+
 #### Update `gh-deploy` command (#2170)
 
 The vendored (and modified) copy of ghp_import has been replaced with a
-dependency on the upstream library. As of version 1.0.0, [ghp_import] includes a
+dependency on the upstream library. As of version 1.0.0, [ghp-import] includes a
 Python API which makes it possible to call directly.
 
 MkDocs can now benefit from recent bug fixes and new features, including the following:
@@ -52,6 +97,32 @@ MkDocs can now benefit from recent bug fixes and new features, including the fol
 * Git author and committer environment variables should be respected (#1383).
 
 [ghp-import]: https://github.com/c-w/ghp-import/
+
+#### Rework auto-reload and HTTP server for `mkdocs serve` (#2385)
+
+`mkdocs serve` now uses a new underlying server + file watcher implementation,
+based on [http.server] from standard library and [watchdog]. It provides similar
+functionality to the previously used [livereload] library (which is now dropped
+from dependencies, along with [tornado]).
+
+This makes reloads more responsive and consistent in terms of timing. Multiple
+rapid file changes no longer cause the site to repeatedly rebuild (issue #2061).
+
+Almost every aspect of the server is slightly different, but actual visible
+changes are minor. The logging outputs are only *similar* to the old ones.
+Degradations in behavior are not expected, and should be reported if found.
+
+[http.server]: https://docs.python.org/3/library/http.server.html
+[watchdog]: https://pypi.org/project/watchdog/
+[livereload]: https://pypi.org/project/livereload/
+[tornado]: https://pypi.org/project/tornado/
+
+##### Offset the local site root according to the sub-path of the `site_url` (#2424)
+
+When using `mkdocs serve` and having the `site_url` specified as e.g.
+`http://example.org/sub/path/`, now the root of the locally served site
+becomes `http://127.0.0.1:8000/sub/path/` and all document paths are offset
+accordingly.
 
 #### A `build_error` event was added (#2103)
 
@@ -92,23 +163,73 @@ configuration documentation for details.
 
 ### Backward Incompatible Changes in 1.2
 
-A theme's files are now excluded from the list of watched files by default
-when using the `--livereload` server. This new default behavior is what most
-users need and provides better performance when editing site content.
-Theme developers can enable the old behavior with the `--watch-theme`
-option. (#2092).
+* The [site_url](../user-guide/configuration.md#site_url) configuration option
+  is now **required**. If it is not set, a warning will be issued. In a future
+  release an error will be raised (#2189).
 
-The `mkdocs` theme now removes the sidebar when printing a page. This frees
-up horizontal space for better rendering of content like tables (#2193).
+    The [use_directory_urls](../user-guide/configuration.md#use_directory_urls)
+    configuration option will be forced to `false` if
+    [site_url](../user-guide/configuration.md#site_url) is set to an empty
+    string. In that case, if `use_directory_urls` is not explicitly set to
+    `false`, a warning will be issued (#2189).
 
-The `mkdocs.config.DEFAULT_SCHEMA` global variable has been replaced with the
-function `mkdocs.config.defaults.get_schema()`, which ensures that each
-instance of the configuration is unique (#2289).
+* The `google_analytics` configuration option is deprecated as Google appears to
+  be fazing it out in favor of its new Google Analytics 4 property. See the
+  documentation for your theme for alternatives which can be configured as part
+  of your theme configuration. For example, the [mkdocs][mkdocs-theme] and
+  [readthedocs][rtd-theme] themes have each added a new `theme.analytics.gtag`
+  configuration option which uses the new Google Analytics 4 property. See
+  Google's documentation on how to [Upgrade to a Google Analytics 4
+  property][ga4]. Then set  `theme.analytics.gtag` to the "G-" ID and delete the
+  `google_analytics` configuration option which contains a "UA-" ID. So long
+  as the old "UA-" ID and new "G-" ID are properly linked in your Google
+  account, and you are using the "G-" ID, the data will be made available in
+  both the old and new formats by Google Analytics. See #2252.
 
-The `mkdocs.utils.warning_filter` is deprecated and now does nothing. Plugins
- should remove any reference to is as it may be deleted in a future release.
- To ensure any warnings get counted, simply log them to the `mkdocs` log (i.e:
-`mkdocs.plugins.pluginname`).
+* A theme's files are now excluded from the list of watched files by default
+  when using the `--livereload` server. This new default behavior is what most
+  users need and provides better performance when editing site content.
+  Theme developers can enable the old behavior with the `--watch-theme`
+  option. (#2092).
+
+* The `mkdocs` theme now removes the sidebar when printing a page. This frees
+  up horizontal space for better rendering of content like tables (#2193).
+
+* The `mkdocs.config.DEFAULT_SCHEMA` global variable has been replaced with the
+  function `mkdocs.config.defaults.get_schema()`, which ensures that each
+  instance of the configuration is unique (#2289).
+
+* The `mkdocs.utils.warning_filter` is deprecated and now does nothing. Plugins
+  should remove any reference to is as it may be deleted in a future release.
+  To ensure any warnings get counted, simply log them to the `mkdocs` log (i.e.:
+  `mkdocs.plugins.pluginname`).
+
+* The `on_serve` event (which receives the `server` object and the `builder`
+  function) is affected by the server rewrite. `server` is now a
+  `mkdocs.livereload.LiveReloadServer` instead of `livereload.server.Server`.
+  The typical action that plugins can do with these is to call
+  `server.watch(some_dir, builder)`, which basically adds that directory to
+  watched directories, causing the site to be rebuilt on file changes. That
+  still works, but passing any other function to `watch` is deprecated and shows
+  a warning. This 2nd parameter is already optional, and will accept only this
+  exact `builder` function just for compatibility.
+
+* The `python` method of the `plugins.search.prebuild_index` configuration
+  option is pending deprecation as of version 1.2. It is expected that in
+  version 1.3 it will raise a warning if used and in version 1.4 it will raise
+  an error. Users are encouraged to use an alternate method to generate a
+  prebuilt index for search.
+
+* The `lunr` and `lunr[languages]` dependencies are no longer installed by
+  default. The dependencies are only needed for the rare user who pre-builds the
+  search index and uses the `python` option, which is now pending deprecation.
+  If you use this feature, then you will need to manually install `lunr` and
+  `lunr[languages]`. A warning is issued if the dependencies are needed but not
+  installed.
+
+[mkdocs-theme]: ../user-guide/choosing-your-theme.md#mkdocs
+[rtd-theme]: ../user-guide/choosing-your-theme.md#readthedocs
+[ga4]: https://support.google.com/analytics/answer/9744165?hl=en
 
 ### Other Changes and Additions to Version 1.2
 
@@ -120,7 +241,7 @@ The `mkdocs.utils.warning_filter` is deprecated and now does nothing. Plugins
   item in the ReadTheDocs theme (#2297).
 * Structure Files object now has a `remove` method to help plugin developers
   manipulate the Files tree. The corresponding `src_paths` has become a
-  property to accomodate this possible dynamic behavior. See #2305.
+  property to accommodate this possible dynamic behavior. See #2305.
 * Updated highlight.js to 10.5.0. See #2313.
 * Bugfix: Search plugin now works with Japanese language. See #2178.
 * Documentation has been refactored (#1629).
@@ -159,7 +280,7 @@ The `mkdocs.utils.warning_filter` is deprecated and now does nothing. Plugins
 
 #### Support for Lunr.py as `prebuild_index` engine
 
-Mkdocs now supports prebuilding indices using [Lunr.py][lunrpy-docs], a pure
+Mkdocs now supports pre-building indices using [Lunr.py][lunrpy-docs], a pure
 Python implementation of Lunr.js, allowing the user to avoid installing a
 NodeJS environment if so desired. For more information please read the
 [`prebuild_index` documentation][prebuildindex-docs].
@@ -180,7 +301,7 @@ documentation][rtd-docs] for details.
 #### Update `mkdocs` theme to Bootswatch 4.1.3 (#1563)
 
 The `mkdocs` theme now supports all the features of [Bootswatch 4.1].
-Additionaly, 2 filenames were changed in this update. If you are using a theme
+Additionally, 2 filenames were changed in this update. If you are using a theme
 which inherits from the `mkdocs` theme, the theme developer may need to update
 these filenames as follows.
 
@@ -212,8 +333,8 @@ may be removed in a future version of MkDocs.
 ### Other Changes and Additions to Version 1.1
 
 * Bugfix: Ensure nested dot files in themes are ignored and document behavior (#1981).
-* Update minimum dependancy to Markdown 3.2.1.
-* Updated minimum dependancy to Jinja 2.10.1 to address security
+* Update minimum dependency to Markdown 3.2.1.
+* Updated minimum dependency to Jinja 2.10.1 to address security
   concerns (#1780).
 * Update to lunr.js 2.3.8 (#1989).
 * Add support for Python 3.8.
@@ -298,12 +419,12 @@ The changes included in the refactor are summarized below.
 As part of the internal refactor, a number of backward incompatible changes have
 been introduced, which are summarized below.
 
-###### URLS have changed when `use_directory_urls` is `False`
+###### URLs have changed when `use_directory_urls` is `False`
 
 Previously, all Markdown pages would be have their filenames altered to be index
 pages regardless of how the [use_directory_urls] setting was configured.
 However, the path munging is only needed when `use_directory_urls` is set to
-`True` (the default). The path mungling no longer happens when
+`True` (the default). The path mangling no longer happens when
 `use_directory_urls` is set to `False`, which will result in different URLs for
 all pages that were not already index files. As this behavior only effects a
 non-default configuration, and the most common user-case for setting the option
@@ -430,7 +551,7 @@ meta-data or MultiMarkdown style meta-data is being used.
 Previously MkDocs would recognize MultiMarkdown style meta-data between the
 deliminators. Now, if the deliminators are detected, but the content between the
 deliminators is not valid YAML meta-data, MkDocs does not attempt to parse the
-content as MultiMarkdown style meta-data. Therefore, MultiMarkdowns style
+content as MultiMarkdown style meta-data. Therefore, MultiMarkdown's style
 meta-data must not include the deliminators. See the [MultiMarkdown style
 meta-data documentation] for details.
 
@@ -502,7 +623,7 @@ value to the `theme.custom_dir` option and a warning was issued. As of version
 * Refactor `writing-your-docs.md` (#1392).
 * Workaround Safari bug when zooming to &lt; 100% (#1389).
 * Remove addition of `clicky` class to body and animations. (#1387).
-* Prevent search plugin from reinjecting `extra_javascript` files (#1388).
+* Prevent search plugin from re-injecting `extra_javascript` files (#1388).
 * Refactor `copy_media_files` util function for more flexibility (#1370).
 * Remove PyPI Deployment Docs (#1360).
 * Update links to Python-Markdown library (#1360).
@@ -661,7 +782,7 @@ JavaScript files will not be included in the HTML templates, however, a warning
 will be issued. In other words, they will still be copied to the `site-dir`, but
 they will not have any effect on the theme if they are not explicitly listed.
 
-All CSS and javaScript files in the `docs_dir` should be explicitly listed in
+All CSS and JavaScript files in the `docs_dir` should be explicitly listed in
 the `extra_css` or `extra_javascript` config settings going forward.
 
 ### Other Changes and Additions to Version 0.17.0
@@ -837,7 +958,7 @@ included in the HTML templates. In other words, they will still be copied to the
 `site-dir`, but they will not have any effect on the theme if they are not
 explicitly listed.
 
-All CSS and javaScript files in the `docs_dir` should be explicitly listed in
+All CSS and JavaScript files in the `docs_dir` should be explicitly listed in
 the `extra_css` or `extra_javascript` config settings going forward.
 
 #### Support for dirty builds. (#990)
@@ -1133,7 +1254,7 @@ documentation.
 * Add favicon support to the ReadTheDocs theme HTML. (#422)
 * Automatically refresh the browser when files are edited. (#163)
 * Bugfix: Never re-write URLs in code blocks. (#240)
-* Bugfix: Don't copy ditfiles when copying media from the `docs_dir`. (#254)
+* Bugfix: Don't copy dotfiles when copying media from the `docs_dir`. (#254)
 * Bugfix: Fix the rendering of tables in the ReadTheDocs theme. (#106)
 * Bugfix: Add padding to the bottom of all bootstrap themes. (#255)
 * Bugfix: Fix issues with nested Markdown pages and the automatic pages
